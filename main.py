@@ -23,6 +23,18 @@ class DailyLogCreate(BaseModel):
     morning_spf: bool = False
     evening_cleanser: bool = False
     evening_moisturizer: bool = False
+    water_intake: int = 0  
+
+class WaterUpdate(BaseModel):
+    user_id: int
+    log_date: str  
+    ml: int
+
+class IngredientScan(BaseModel):
+    user_id: int
+    product_name: Optional[str] = "Невідомий засіб"
+    ingredients_text: str
+    analysis_result: str
 
 class ChatRequest(BaseModel):
     user_id: int
@@ -34,19 +46,37 @@ class FavoriteRequest(BaseModel):
     
 class SkinProfileCreate(BaseModel):
     user_id: int
-    gender: Optional[str] = None
-    age: Optional[int] = None
-    skin_type: Optional[str] = None
-    is_sensitive: Optional[bool] = None
-    main_concern: Optional[str] = None
-    breakouts_frequency: Optional[str] = None
-    diet_quality: Optional[str] = None
-    sleep_quality: Optional[str] = None
+    age_group: str
+    gender: str
+    skin_type: str
+    combo_details: Optional[str] = None
+    is_sensitive: bool
+    sensitivity_details: Optional[str] = None
+    morning_state: str
+    after_wash_state: str
+    main_concern: str
+    dermatologist_diagnosis: Optional[str] = None
+    breakouts_frequency: str
+    breakout_triggers: Optional[str] = None
+    wrinkles_level: Optional[str] = None
+    elasticity: Optional[str] = None
+    has_pigmentation: bool
+    sugar_intake: str
+    sleep_quality: str
     health_issues: Optional[str] = None
-    allergies: Optional[str] = None
+    supplements: Optional[str] = None
     menstrual_cycle_stage: Optional[str] = None
-    current_routine: Optional[str] = None
-
+    pregnancy_status: Optional[str] = None
+    lactation_status: Optional[str] = None
+    shave_frequency: Optional[str] = None
+    shave_reaction: Optional[str] = None
+    has_beard: Optional[str] = None
+    care_preference: Optional[str] = None
+    current_routine: str
+    cosmetologist_visits: str
+    budget_expectation: str
+    additional_info: Optional[str] = None
+    
 class UserCreate(BaseModel):
     username: str
     email: str
@@ -129,12 +159,12 @@ def save_daily_log(log: DailyLogCreate):
             REPLACE INTO daily_logs (
                 user_id, log_date, 
                 morning_cleanser, morning_moisturizer, morning_spf,
-                evening_cleanser, evening_moisturizer
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                evening_cleanser, evening_moisturizer, water_intake
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             log.user_id, log.log_date,
             log.morning_cleanser, log.morning_moisturizer, log.morning_spf,
-            log.evening_cleanser, log.evening_moisturizer
+            log.evening_cleanser, log.evening_moisturizer, log.water_intake
         ))
         
         conn.commit()
@@ -217,20 +247,31 @@ def submit_quiz(profile: SkinProfileCreate):
     try:
         cursor.execute('SELECT id FROM users WHERE id = ?', (profile.user_id,))
         if not cursor.fetchone():
-            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Користувача не знайдено")
         
         cursor.execute('''
             REPLACE INTO skin_profiles (
-                user_id, gender, age, skin_type, is_sensitive, main_concern,
-                breakouts_frequency, diet_quality, sleep_quality, health_issues,
-                allergies, menstrual_cycle_stage, current_routine
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                user_id, age_group, gender, skin_type, combo_details, is_sensitive,
+                sensitivity_details, morning_state, after_wash_state, main_concern,
+                dermatologist_diagnosis, breakouts_frequency, breakout_triggers,
+                wrinkles_level, elasticity, has_pigmentation, sugar_intake,
+                sleep_quality, health_issues, supplements, menstrual_cycle_stage,
+                pregnancy_status, lactation_status, shave_frequency, shave_reaction,
+                has_beard, care_preference, current_routine, cosmetologist_visits,
+                budget_expectation, additional_info
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            profile.user_id, profile.gender, profile.age, profile.skin_type,
-            profile.is_sensitive, profile.main_concern, profile.breakouts_frequency,
-            profile.diet_quality, profile.sleep_quality, profile.health_issues,
-            profile.allergies, profile.menstrual_cycle_stage, profile.current_routine
+            profile.user_id, profile.age_group, profile.gender, profile.skin_type,
+            profile.combo_details, profile.is_sensitive, profile.sensitivity_details,
+            profile.morning_state, profile.after_wash_state, profile.main_concern,
+            profile.dermatologist_diagnosis, profile.breakouts_frequency,
+            profile.breakout_triggers, profile.wrinkles_level, profile.elasticity,
+            profile.has_pigmentation, profile.sugar_intake, profile.sleep_quality,
+            profile.health_issues, profile.supplements, profile.menstrual_cycle_stage,
+            profile.pregnancy_status, profile.lactation_status, profile.shave_frequency,
+            profile.shave_reaction, profile.has_beard, profile.care_preference,
+            profile.current_routine, profile.cosmetologist_visits, profile.budget_expectation,
+            profile.additional_info
         ))
         
         conn.commit()
@@ -288,14 +329,13 @@ def get_smart_recommendations(user_id: int):
         profile_row = cursor.fetchone()
         
         if not profile_row:
-            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Анкету не знайдено. Пройдіть тест!")
             
         profile = dict(profile_row)
         
         insights = []
         
-        diet = profile.get('diet_quality')
+        diet = profile.get('sugar_intake')
         if diet and ('цукор' in diet.lower() or 'швидкі вуглеводи' in diet.lower()):
             insights.append("💡 Інсайт: Регулярне вживання цукру та швидких вуглеводів може провокувати глікацію (руйнування колагену) та запалення. Спробуй збалансувати раціон повільними вуглеводами та білком.")
             
@@ -367,6 +407,57 @@ def chat_with_skinny(request: ChatRequest):
         return {"reply": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/update-water")
+def update_water(data: WaterUpdate):
+    conn = sqlite3.connect('skincode.db')
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            INSERT OR IGNORE INTO daily_logs (user_id, log_date) 
+            VALUES (?, ?)
+        ''', (data.user_id, data.log_date))
+        
+        cursor.execute('''
+            UPDATE daily_logs SET water_intake = water_intake + ? 
+            WHERE user_id = ? AND log_date = ?
+        ''', (data.ml, data.user_id, data.log_date))
+        
+        conn.commit()
+        return {"message": f"Додано {data.ml} мл води!"}
+    finally:
+        conn.close()
+
+@app.post("/save-scan")
+def save_scan(scan: IngredientScan):
+    conn = sqlite3.connect('skincode.db')
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            INSERT INTO scan_history (user_id, product_name, ingredients_text, analysis_result)
+            VALUES (?, ?, ?, ?)
+        ''', (scan.user_id, scan.product_name, scan.ingredients_text, scan.analysis_result))
+        conn.commit()
+        return {"message": "Результат збережено в історію"}
+    finally:
+        conn.close()
+
+@app.get("/recent-scans/{user_id}")
+def get_recent_scans(user_id: int):
+    conn = sqlite3.connect('skincode.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT product_name, analysis_result, scan_date 
+        FROM scan_history 
+        WHERE user_id = ? 
+        ORDER BY scan_date DESC LIMIT 5
+    ''', (user_id,))
+    scans = cursor.fetchall()
+    conn.close()
+    return [{"product": s[0], "result": s[1], "date": s[2]} for s in scans]
+
+
 if __name__ == '__main__':
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
