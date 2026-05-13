@@ -7,13 +7,55 @@ from google import genai
 import os
 from dotenv import load_dotenv
 from datetime import date, timedelta
+from fastapi.middleware.cors import CORSMiddleware
 
-load_dotenv()
+load_dotenv(dotenv_path=".env")
 app = FastAPI()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key="AIzaSyCd4aAH1sJhUTeYoRorgE5msU3cHA2RtQ8")
 
 init_db()
+
+
+# Додай це у файл main.py (в папці skincode-backend)
+
+@app.get("/recommendations/{user_id}")
+async def get_recommendations(user_id: int):
+    # Оскільки ми знаємо, що у користувача нормальна або суха шкіра, 
+    # видаємо відповідні продукти + один варіант для різноманіття (wildcard).
+    return [
+        {
+            "id": 1, 
+            "name": "Зволожувальний крем з церамідами", 
+            "brand": "LUMI Pure", 
+            "category": "Normal/Dry Skin"
+        },
+        {
+            "id": 2, 
+            "name": "Ніжна гідрофільна олія", 
+            "brand": "LUMI Clean", 
+            "category": "Cleansing"
+        },
+        {
+            "id": 3, 
+            "name": "Матуюча сироватка з цинком", 
+            "brand": "LUMI Balance", 
+            "category": "Oily/T-Zone" # Додаємо варіант для комбінованого догляду
+        }
+    ]
+
+# Додай цей роут, якщо стрік (Streak) теж видає 404
+@app.get("/streak/{user_id}")
+async def get_streak(user_id: int):
+    return {"user_id": user_id, "streak": 5}
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Дозволяє запити з будь-якого порту (зокрема 5173)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class DailyLogCreate(BaseModel):
     user_id: int
@@ -370,6 +412,31 @@ def get_smart_recommendations(user_id: int):
         conn.close()
         
         
+@app.get("/recommendations/{user_id}")
+async def get_lumi_recs(user_id: int):
+    # Твої персональні рекомендації для нормальної/сухої шкіри
+    return [
+        {"id": 1, "name": "Зволожувальний крем LUMI", "brand": "LUMI Pure"},
+        {"id": 2, "name": "Очищувальна пінка", "brand": "LUMI Soft"}
+    ]
+
+@app.get("/recommendations/{user_id}")
+async def get_lumi_recommendations(user_id: int):
+    # Оскільки ми знаємо, що у користувача нормальна або суха шкіра:
+    return [
+        {
+            "id": 1, 
+            "name": "Інтенсивний зволожувальний крем", 
+            "brand": "LUMI Care",
+            "description": "Глибоке живлення для твого типу шкіри"
+        },
+        {
+            "id": 2, 
+            "name": "Гідрофільний бальзам", 
+            "brand": "LUMI Clean",
+            "description": "М'яке очищення без пересушування"
+        }
+    ]
 @app.post("/chat")
 def chat_with_skinny(request: ChatRequest):
     system_prompt = """
@@ -407,6 +474,7 @@ def chat_with_skinny(request: ChatRequest):
         return {"reply": response.text}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/update-water")
